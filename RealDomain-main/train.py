@@ -12,6 +12,7 @@ import torchvision.datasets as dset
 import torch.backends.cudnn as cudnn
 import random
 import torchsummary
+import genotypes
 from model import NetworkCIFAR as Network
 
 
@@ -51,7 +52,7 @@ device = torch.device('cuda:{}'.format(args.gpu) if torch.cuda.is_available() el
 print(device)
 
 args.save = 'logs/eval-{}-{}-{}-{}'.format(args.save,args.set,args.seed, args.note)
-utils.create_exp_dir(args.save, scripts_to_save=glob.glob('*.py'))
+utils.create_exp_dir(args.save, scripts_to_save=None)
 
 log_format = '%(asctime)s %(message)s'
 logging.basicConfig(stream=sys.stdout, level=logging.INFO,
@@ -129,6 +130,7 @@ def main():
 
         #utils.save(model, os.path.join(args.save, 'weights.pt'))
         scheduler.step()
+	break
 
 def train(train_queue, model, criterion, optimizer):
     objs = utils.AvgrageMeter()
@@ -188,4 +190,5 @@ def infer(valid_queue, model, criterion):
 
 
 if __name__ == '__main__':
+    exit(1)
     main() 
