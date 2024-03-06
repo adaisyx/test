@@ -99,7 +99,7 @@ class AuxiliaryHeadImageNet(nn.Module):
             nn.Conv2d(128, 768, 2, bias=False),
             # NOTE: This batchnorm was omitted in my earlier implementation due to a typo.
             # Commenting it out for consistency with the experiments in the paper.
-            nn.BatchNorm2d(768),
+            # nn.BatchNorm2d(768),
             nn.ReLU(inplace=True)
         )
         self.classifier = nn.Linear(768, num_classes)
@@ -214,24 +214,24 @@ class NetworkImageNet(nn.Module):
         logits = self.classifier(out.view(out.size(0), -1))
         return logits, logits_aux
 
-if __name__=="__main__":
-    pytorch_model = NetworkCIFAR(36, 10, 20, False, DOTS_final_C10).cuda()
-    pytorch_model.drop_path_prob=0
-    pytorch_model.eval()
-    pytorch_test_img = torch.rand((1, 3, 224, 224)).cuda()
+# if __name__=="__main__":
+#     pytorch_model = NetworkCIFAR(36, 10, 20, False, DOTS_final_C10).cuda()
+#     pytorch_model.drop_path_prob=0
+#     pytorch_model.eval()
+#     pytorch_test_img = torch.rand((1, 3, 224, 224)).cuda()
 
-    turns=20
-    bs=1
-    with torch.no_grad():
-    # 测试Pytorch一次前向传播的平均用时
-        for i in range(10):
-            pytorch_result = pytorch_model(pytorch_test_img)  # Pytorch热身
-        torch.cuda.synchronize()
-        sta = time.time()
-        for i in range(turns):
-            pytorch_result = pytorch_model(pytorch_test_img)
-        torch.cuda.synchronize()  # 只有运行了torch.cuda.synchronize()才会真正地运行，时间才是有效的，因此执行forward前后都要执行这句话
-        end = time.time()
-        tc_time = round((end - sta) / turns, 5)  # 执行turns次的平均时间，输出时保留5位小数
-        tc_fps = round(bs * turns / (end - sta), 0)  # 计算FPS
-        print(f"- Pytorch forward average time cost: {tc_time}, Batch Size: {bs}, FPS: {tc_fps}")
+#     turns=20
+#     bs=1
+#     with torch.no_grad():
+#     # 测试Pytorch一次前向传播的平均用时
+#         for i in range(10):
+#             pytorch_result = pytorch_model(pytorch_test_img)  # Pytorch热身
+#         torch.cuda.synchronize()
+#         sta = time.time()
+#         for i in range(turns):
+#             pytorch_result = pytorch_model(pytorch_test_img)
+#         torch.cuda.synchronize()  # 只有运行了torch.cuda.synchronize()才会真正地运行，时间才是有效的，因此执行forward前后都要执行这句话
+#         end = time.time()
+#         tc_time = round((end - sta) / turns, 5)  # 执行turns次的平均时间，输出时保留5位小数
+#         tc_fps = round(bs * turns / (end - sta), 0)  # 计算FPS
+#         print(f"- Pytorch forward average time cost: {tc_time}, Batch Size: {bs}, FPS: {tc_fps}")
