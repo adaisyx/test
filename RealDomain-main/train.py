@@ -91,7 +91,7 @@ def main():
     # logging.info("param size = %fMB", utils.count_parameters_in_MB(model))
 
     criterion = nn.CrossEntropyLoss()
-    criterion = criterion.cuda()
+    criterion = criterion.to(device)
     optimizer = torch.optim.SGD(
         model.parameters(),
         args.learning_rate,
@@ -119,7 +119,7 @@ def main():
 
     for epoch in range(args.epochs):
         
-        logging.info('epoch %d lr %e', epoch, scheduler.get_lr()[0])
+        logging.info('epoch %d lr %e', epoch, scheduler.get_last_lr()[0])
         model.drop_path_prob = args.drop_path_prob * epoch / args.epochs
 
         train_acc, train_obj = train(train_queue, model, criterion, optimizer)
@@ -142,24 +142,24 @@ def train(train_queue, model, criterion, optimizer):
         input = input.to(device, non_blocking=True)
         target = target.to(device, non_blocking=True)
 
-    optimizer.zero_grad()
-    logits, logits_aux = model(input)
-    loss = criterion(logits, target)
-    if args.auxiliary:
-        loss_aux = criterion(logits_aux, target)
-        loss += args.auxiliary_weight*loss_aux
-    loss.backward()
-    nn.utils.clip_grad_norm(model.parameters(), args.grad_clip)
-    optimizer.step()
+        optimizer.zero_grad()
+        logits, logits_aux = model(input)
+        loss = criterion(logits, target)
+        if args.auxiliary:
+            loss_aux = criterion(logits_aux, target)
+            loss += args.auxiliary_weight*loss_aux
+        loss.backward()
+        nn.utils.clip_grad_norm(model.parameters(), args.grad_clip)
+        optimizer.step()
 
-    prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
-    n = input.size(0)
-    objs.update(loss.data.item(), n)
-    top1.update(prec1.data.item(), n)
-    top5.update(prec5.data.item(), n)
+        prec1, prec5 = utils.accuracy(logits, target, topk=(1, 5))
+        n = input.size(0)
+        objs.update(loss.data.item(), n)
+        top1.update(prec1.data.item(), n)
+        top5.update(prec5.data.item(), n)
 
-    if step % args.report_freq == 0:
-        logging.info('train %03d %e %f %f', step, objs.avg, top1.avg, top5.avg)
+        if step % args.report_freq == 0:
+            logging.info('train %03d %e %f %f', step, objs.avg, top1.avg, top5.avg)
 
     return top1.avg, objs.avg
 
@@ -183,8 +183,8 @@ def infer(valid_queue, model, criterion):
             top1.update(prec1.data.item(), n)
             top5.update(prec5.data.item(), n)
 
-        if step % args.report_freq == 0:
-            logging.info('valid %03d %e %f %f', step, objs.avg, top1.avg, top5.avg)
+            if step % args.report_freq == 0:
+                logging.info('valid %03d %e %f %f', step, objs.avg, top1.avg, top5.avg)
 
     return top1.avg, objs.avg
 
