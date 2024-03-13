@@ -141,10 +141,10 @@ class AuxiliaryHeadImageNet(nn.Module):
     self.features = nn.Sequential(
       nn.ReLU(inplace=True),
       nn.AvgPool2d(5, stride=2, padding=0, count_include_pad=False),
-      nn.Conv2d(C, 128, 1, bias=False),
+      Conv2dShift(C, 128, 1, bias=False),
       nn.BatchNorm2d(128),
       nn.ReLU(inplace=True),
-      nn.Conv2d(128, 768, 2, bias=False),
+      Conv2dShift(128, 768, 2, bias=False),
       # NOTE: This batchnorm was omitted in my earlier implementation due to a typo.
       # Commenting it out for consistency with the experiments in the paper.
       # nn.BatchNorm2d(768),
@@ -166,16 +166,16 @@ class NetworkImageNet(nn.Module):
     self._auxiliary = auxiliary
 
     self.stem0 = nn.Sequential(
-      nn.Conv2d(3, C // 2, kernel_size=3, stride=2, padding=1, bias=False),
+      Conv2dShift(3, C // 2, kernel_size=3, stride=2, padding=1, bias=False),
       nn.BatchNorm2d(C // 2),
       nn.ReLU(inplace=True),
-      nn.Conv2d(C // 2, C, 3, stride=2, padding=1, bias=False),
+      Conv2dShift(C // 2, C, 3, stride=2, padding=1, bias=False),
       nn.BatchNorm2d(C),
     )
 
     self.stem1 = nn.Sequential(
       nn.ReLU(inplace=True),
-      nn.Conv2d(C, C, 3, stride=2, padding=1, bias=False),
+      Conv2dShift(C, C, 3, stride=2, padding=1, bias=False),
       nn.BatchNorm2d(C),
     )
 
