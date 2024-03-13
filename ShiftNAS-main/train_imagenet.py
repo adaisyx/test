@@ -13,7 +13,8 @@ import torch.utils
 import torchvision.datasets as dset
 import torch.backends.cudnn as cudnn
 import random
-from model import NetworkCIFAR as Network
+from model import NetworkImageNet as Network
+import torchvision.transforms as transforms
 
 parser = argparse.ArgumentParser("cifar")
 # shift setting
@@ -24,20 +25,20 @@ parser.add_argument('--weight_bits', type=int, default=5, help='number of bits t
 parser.add_argument('--activation_bits', nargs='+', default=[16,16],
                     help='number of integer and fraction bits to represent activation (fixed point format)')
 # model setting
-parser.add_argument('--init_channels', type=int, default=36, help='num of init channels')
-parser.add_argument('--layers', type=int, default=20, help='total number of layers')
+parser.add_argument('--init_channels', type=int, default=46, help='num of init channels')
+parser.add_argument('--layers', type=int, default=14, help='total number of layers')
 parser.add_argument('--auxiliary', action='store_true', default=False, help='use auxiliary tower')
 parser.add_argument('--auxiliary_weight', type=float, default=0.4, help='weight for auxiliary loss')
 parser.add_argument('--cutout', action='store_true', default=True, help='use cutout')
 parser.add_argument('--cutout_length', type=int, default=16, help='cutout length')
 parser.add_argument('--drop_path_prob', type=float, default=0.2, help='drop path probability')
 # training setting
-parser.add_argument('--data', type=str, default='../data', help='location of the data corpus')
+parser.add_argument('--data', type=str, default='./data', help='location of the data corpus')
 parser.add_argument('--set', type=str, default='cifar100', help='location of the data corpus')
 parser.add_argument('--workers', type=int, default=4, help='number of data loading workers')
-parser.add_argument('--batch_size', type=int, default=128, help='batch size')
-parser.add_argument('--epochs', type=int, default=600, help='num of training epochs')
-parser.add_argument('--lr', type=float, default=0.025, help='init learning rate') # 0.1 or 0.01
+parser.add_argument('--batch_size', type=int, default=1024, help='batch size')
+parser.add_argument('--epochs', type=int, default=250, help='num of training epochs')
+parser.add_argument('--lr', type=float, default=0.01, help='init learning rate') # 0.1 or 0.01
 parser.add_argument('--lr_sign', type=float, default=None, help='init learning rate for sign')
 parser.add_argument('--momentum', type=float, default=0.9, help='momentum')
 parser.add_argument('--weight_decay', type=float, default=3e-4, help='weight decay') # 1e-4 or 3e-4
@@ -67,9 +68,23 @@ fh = logging.FileHandler(os.path.join(args.save, 'log.txt'))
 fh.setFormatter(logging.Formatter(log_format))
 logging.getLogger().addHandler(fh)
 
-CIFAR_CLASSES = 10
-if args.set=='cifar100':
-    CIFAR_CLASSES = 100
+CLASSES = 1000
+
+class CrossEntropyLabelSmooth(nn.Module):
+
+    def __init__(self, num_classes, epsilon):
+        super(CrossEntropyLabelSmooth, self).__init__()
+        self.num_classes = num_classes
+        self.epsilon = epsilon
+        self.logsoftmax = nn.LogSoftmax(dim=1)
+
+    def forward(self, inputs, targets):
+        log_probs = self.logsoftmax(inputs)
+        targets = torch.zeros_like(log_probs).scatter_(1, targets.unsqueeze(1), 1)
+        targets = (1 - self.epsilon) * targets + self.epsilon / self.num_classes
+        loss = (-targets * log_probs).mean(0).sum()
+        return loss
+
 
 def main():
     np.random.seed(args.seed)
@@ -83,7 +98,7 @@ def main():
 
     genotype = eval("genotypes.%s" % args.arch)
     logging.info(genotype)
-    model = Network(args.init_channels, CIFAR_CLASSES, args.layers, args.auxiliary, genotype)
+    model = Network(args.init_channels, CLASSES, args.layers, args.auxiliary, genotype)
     model = model.to(device)
     logging.info("param size = %fMB", utils.count_parameters_in_MB(model))
 
@@ -105,6 +120,8 @@ def main():
     
     criterion = nn.CrossEntropyLoss()
     criterion = criterion.to(device)
+    criterion_smooth = CrossEntropyLabelSmooth(CLASSES, args.label_smooth)
+    criterion_smooth = criterion_smooth.to(device)
 
     optimizer = None
     if(args.shift_type == 'PS'):
@@ -113,13 +130,38 @@ def main():
     elif(args.shift_type == 'Q'):
         optimizer = torch.optim.SGD(params_dict, args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
     
-    train_transform, valid_transform = utils._data_transforms_cifar10(args)
-    if args.set=='cifar100':
-        train_data = dset.CIFAR100(root=args.data, train=True, download=True, transform=train_transform)
-        valid_data = dset.CIFAR100(root=args.data, train=False, download=True, transform=valid_transform)
-    else:
-        train_data = dset.CIFAR10(root=args.data, train=True, download=True, transform=train_transform)
-        valid_data = dset.CIFAR10(root=args.data, train=False, download=True, transform=valid_transform)
+
+    traindir = os.path.join(args.data_dir, 'train')
+    validdir = os.path.join(args.data_dir, 'val')
+    normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    train_data = dset.ImageFolder(
+        traindir,
+        transforms.Compose([
+            transforms.RandomResizedCrop(224),
+            transforms.RandomHorizontalFlip(),
+            transforms.ColorJitter(
+                brightness=0.4,
+                contrast=0.4,
+                saturation=0.4,
+                hue=0.2),
+            transforms.ToTensor(),
+            normalize,
+        ]))
+    valid_data = dset.ImageFolder(
+        validdir,
+        transforms.Compose([
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            normalize,
+        ]))
+    # train_transform, valid_transform = utils._data_transforms_cifar10(args)
+    # if args.set=='cifar100':
+    #     train_data = dset.CIFAR100(root=args.data, train=True, download=True, transform=train_transform)
+    #     valid_data = dset.CIFAR100(root=args.data, train=False, download=True, transform=valid_transform)
+    # else:
+    #     train_data = dset.CIFAR10(root=args.data, train=True, download=True, transform=train_transform)
+    #     valid_data = dset.CIFAR10(root=args.data, train=False, download=True, transform=valid_transform)
     train_queue = torch.utils.data.DataLoader(
         train_data, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=args.workers)
     valid_queue = torch.utils.data.DataLoader(
@@ -127,9 +169,13 @@ def main():
 
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, float(args.epochs))
     # scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[80, 120, 160, 180])
-
+    lr = args.lr
     for epoch in range(args.epochs):       
         logging.info('epoch %d lr %e', epoch, scheduler.get_last_lr()[0])
+        if epoch < 5 and args.batch_size > 256:
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = lr * (epoch + 1) / 5.0
+            logging.info('Warming-up Epoch: %d, LR: %e', epoch, lr * (epoch + 1) / 5.0)
         model.drop_path_prob = args.drop_path_prob * epoch / args.epochs
 
         train_acc, train_obj = train(train_queue, model, criterion, optimizer)
